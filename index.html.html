@@ -37,6 +37,13 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--red);outline-off
 .btn-add:hover{background:#E6E3DF}
 .btn-pdf{background:var(--red);color:#fff;width:100%;font-size:15px;padding:13px;margin-top:14px}
 .btn-pdf:hover{background:#A93226}
+.chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px}
+.chip{border:1px solid var(--line);background:#FBFAF8;border-radius:999px;padding:6px 12px;font-size:12.5px;font-weight:500;cursor:pointer;color:var(--ink)}
+.chip:hover{border-color:var(--red);color:var(--red)}
+.chip.cat{font-weight:600;background:#F0EDEA}
+.chip.cat.on{background:var(--red);border-color:var(--red);color:#fff}
+.subwrap{background:#FBFAF8;border:1px dashed var(--line);border-radius:8px;padding:8px;margin-bottom:12px}
+.chiplabel{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .hint{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5}
 
 /* ---------- A4 SHEET PREVIEW ---------- */
@@ -94,8 +101,21 @@ table.q td.c{text-align:center;white-space:nowrap}
 
     <div class="panel" style="margin-top:14px">
       <h2>Items</h2>
+      <div class="chiplabel">Quick add — choose a category, then an item (everything stays editable)</div>
+      <div class="chips" id="chips"></div>
+      <div class="subwrap" id="subwrap" style="display:none"><div class="chips" id="subchips" style="margin-bottom:0"></div></div>
       <div id="items"></div>
-      <button class="btn btn-add" onclick="addItem()">+ Add item</button>
+      <button class="btn btn-add" onclick="addItem()">+ Add blank item</button>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <button class="btn btn-add" id="tncbtn" onclick="toggleTnc()">✎ Edit Terms and Conditions</button>
+      <div id="tncpanel" style="display:none;margin-top:12px">
+        <div class="hint" style="margin:0 0 8px">One point per line. Edits apply instantly to the quote — resets when the page reloads.</div>
+        <textarea id="tncbox" oninput="autoGrow(this);render()"
+          style="min-height:200px;font-size:13px;line-height:1.55;resize:vertical"></textarea>
+        <button class="btn btn-add" style="margin-top:8px" onclick="resetTnc()">↺ Reset to Decoory standard</button>
+      </div>
     </div>
 
     <div class="panel" style="margin-top:14px">
@@ -110,7 +130,7 @@ table.q td.c{text-align:center;white-space:nowrap}
       </div>
       <div class="hint" id="pctwarn"></div>
       <button class="btn btn-pdf" onclick="makePdf()">Download PDF</button>
-      <div class="hint">Opens your device's print dialog — choose <b>"Save as PDF"</b>. Works on phone and computer. Terms &amp; conditions and bank details are fixed as per Decoory standard.</div>
+      <div class="hint">Opens your device's print dialog — choose <b>"Save as PDF"</b>. Works on phone and computer. Bank details are fixed as per Decoory standard.</div>
     </div>
   </div>
 
@@ -141,10 +161,118 @@ function niceDate(iso){
 function esc(t){ return (t||"").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"); }
 
 function addItem(d){
-  items.push(Object.assign({desc:"",uom:"Sq Ft",rate:"",qty:""}, d||{}));
+  items.push(Object.assign({title:"",desc:"",uom:"Sq Ft",rate:"",qty:""}, d||{}));
   drawForm(); render();
 }
 function delItem(i){ items.splice(i,1); drawForm(); render(); }
+
+const FIT = "with Kvalit Germany fittings and handles";
+const CATS = [
+ {name:"Wood Work", items:[
+  {t:"Modular Kitchen", d:"Providing and installation of Modular Kitchen made in 18mm THK HDHMR (Century), finished in PU paint, "+FIT+". Action Tesa boilo (waterproof board) used in sink area.", u:"Sq Ft", r:1600},
+  {t:"Wardrobe / Almirah", d:"Providing and installation of Wardrobe made in 18mm THK HDHMR (Century), finished in PU paint, with openable shutters, "+FIT+".", u:"Sq Ft", r:1600},
+  {t:"TV Unit", d:"Providing and installation of TV Unit made in 18mm THK HDHMR (Century), finished in PU paint, "+FIT+".", u:"Sq Ft", r:1600},
+  {t:"Storage Unit", d:"Providing and installation of Storage Unit made in 18mm THK HDHMR, finished in PU paint with design in CNC, with openable / sidelined sliding shutters with frame in wooden or metallic finish along with handles.", u:"Sq Ft", r:1600},
+  {t:"Temple Unit", d:"Providing and installation of Temple Unit made in 18mm THK HDHMR (Century), finished in PU paint, with Lights and MDF CNC Jali Doors, "+FIT+".", u:"Sq Ft", r:1600},
+  {t:"Crockery Unit", d:"Providing and installation of Crockery Unit made in 18mm THK HDHMR (Century), finished in PU paint, "+FIT+".", u:"Sq Ft", r:1600},
+  {t:"Dresser Unit", d:"Providing and installation of Dresser Unit made in 18mm THK HDHMR (Century), finished in PU paint, "+FIT+".", u:"Sq Ft", r:1600},
+  {t:"Study Table & Storage", d:"Providing and installation of Study Table with Storage made in 18mm THK HDHMR (Century), finished in PU paint, "+FIT+".", u:"Sq Ft", r:1150},
+  {t:"Bed Side Storage & Loft", d:"Providing and installation of Bed Side Storage and Loft made in 18mm THK HDHMR (Century), finished in PU paint, with Lights and MDF doors for lighter weight and long lasting.", u:"Sq Ft", r:1600},
+  {t:"Pantry Unit", d:"Providing and installation of Pantry Unit made in 18mm THK HDHMR (Century), finished in PU paint, with Profile Glass Doors, "+FIT+".", u:"Nos", r:15000},
+  {t:"Vanity", d:"Providing and installation of Vanity made in 18mm THK HDHMR (Century), finished in PU paint, "+FIT+".", u:"Nos", r:8000},
+  {t:"Shoe Rack", d:"Providing and installation of Shoe Rack made in 18mm THK HDHMR (Century), finished in PU paint, "+FIT+".", u:"Sq Ft", r:1600},
+  {t:"Moulding", d:"Providing and installation of decorative Moulding, running foot basis, with finishing.", u:"Rft", r:80},
+ ]},
+ {name:"Ceiling & POP", items:[
+  {t:"False Ceiling", d:"Providing and installation of False Ceiling in Gypsum board with GI framework, including jointing, finishing and making good.", u:"Sq Ft", r:120},
+  {t:"POP Punning", d:"Providing POP punning on walls/ceiling for smooth even finish.", u:"Sq Ft", r:60},
+  {t:"Ceiling Cove / Design", d:"Providing and making of ceiling cove / step design in Gypsum with framework and finishing.", u:"Rft", r:150},
+ ]},
+ {name:"Paint & Wall", items:[
+  {t:"Paint Work (Full Flat)", d:"Complete paint work including putty (2 coats), primer (1 coat) and branded emulsion (2 coats) on walls and ceiling.", u:"Nos", r:30000},
+  {t:"Paint Work (Per Sq Ft)", d:"Paint work including putty, primer and branded emulsion (2 coats).", u:"Sq Ft", r:22},
+  {t:"Wall Design / Paneling", d:"Providing and installation of decorative Wall Paneling with finishing as per design.", u:"Sq Ft", r:400},
+  {t:"Texture / Accent Wall", d:"Providing designer texture / accent wall finish with branded material.", u:"Sq Ft", r:120},
+ ]},
+ {name:"Flooring & Tiles", items:[
+  {t:"Floor Tiles", d:"Providing and laying of Floor Tiles including cement mortar bedding, jointing and finishing (tile cost as per selection).", u:"Sq Ft", r:200},
+  {t:"Kitchen / Wall Tiles", d:"Providing and fixing of Wall Tiles in kitchen/bathroom including adhesive, jointing and finishing.", u:"Sq Ft", r:200},
+  {t:"Kitchen Slab Stone", d:"Providing and fixing of Kitchen counter slab stone including cutting, polishing and installation.", u:"Nos", r:16000},
+  {t:"Wooden / Laminate Flooring", d:"Providing and installation of Laminate Wooden Flooring with underlay, including skirting.", u:"Sq Ft", r:250},
+ ]},
+ {name:"Electrical", items:[
+  {t:"Light / Switch Point", d:"Providing electrical point including wiring, slit cutting and branded material. Light, switch and power points counted as separate points.", u:"Nos", r:1000},
+  {t:"Profile Light", d:"Providing and installation of Profile Light, running foot basis, including profile, strip and driver.", u:"Rft", r:200},
+  {t:"Ceiling Light Fixtures", d:"Supply and installation of ceiling light fixtures (fixture cost as per selection).", u:"Nos", r:350},
+ ]},
+ {name:"Doors & Windows", items:[
+  {t:"UPVC Window", d:"Providing and installation of UPVC Window with glass, hardware and sealing.", u:"Sq Ft", r:600},
+  {t:"DOMAL Aluminum Window", d:"Providing and installation of DOMAL section Aluminum Window with glass and hardware.", u:"Sq Ft", r:500},
+  {t:"Safety Door (Steel)", d:"Providing and installation of Steel Safety Door with frame, lock and fittings.", u:"Nos", r:28000},
+  {t:"Wooden Door with Chokhat", d:"Providing and installation of Wooden Door with new Chokhat (door frame), including hardware and finishing.", u:"Nos", r:10000},
+  {t:"Flush Door (Laminate)", d:"Providing and installation of Flush Door with laminate finish on both sides, including hardware.", u:"Nos", r:8500},
+  {t:"Mosquito Net", d:"Providing and installation of Mosquito Net on windows.", u:"Nos", r:6500},
+ ]},
+ {name:"Bathroom & Plumbing", items:[
+  {t:"Complete Bathroom", d:"Complete Bathroom renovation including tiling, CP fittings, sanitaryware and plumbing work, as discussed.", u:"Nos", r:140000},
+  {t:"Plumbing Work", d:"Plumbing work including CPVC lines, fittings and testing, as per site requirement.", u:"Nos", r:15000},
+  {t:"Waterproofing", d:"Providing waterproofing treatment with branded chemical including surface preparation.", u:"Sq Ft", r:80},
+ ]},
+];
+let curCat = -1;
+function drawChips(){
+  document.getElementById("chips").innerHTML =
+    CATS.map((c,i)=>`<button class="chip cat ${i===curCat?'on':''}" onclick="pickCat(${i})">${esc(c.name)}</button>`).join("");
+  const sw=document.getElementById("subwrap");
+  if(curCat<0){ sw.style.display="none"; return; }
+  sw.style.display="block";
+  document.getElementById("subchips").innerHTML =
+    CATS[curCat].items.map((p,j)=>`<button class="chip" onclick="addPreset(${curCat},${j})">+ ${esc(p.t)}</button>`).join("");
+}
+function pickCat(i){ curCat = (curCat===i ? -1 : i); drawChips(); }
+function addPreset(ci,j){
+  const p=CATS[ci].items[j];
+  const it={title:p.t, desc:p.d, uom:p.u, rate:String(p.r), qty:""};
+  // if the only row is still completely blank, replace it instead of stacking
+  if(items.length===1 && !items[0].title && !items[0].desc && !items[0].rate && !items[0].qty){
+    items[0]=it; drawForm(); render();
+  } else {
+    addItem(it);
+  }
+}
+
+const DEFAULT_TERMS = [
+"Rates will change if there is change in material and increase in quantity.",
+"*Society and other types of legal formalities will be completed by the customer.",
+"*The customer will have to make arrangements for electricity, water and toilet etc. The company will ensure its regular cleanliness.",
+"* If acrylic laminate is used, then an additional charge of Rs 100 per square feet will be added to the wood work.",
+"* An additional charge of Rs 150 per square feet will be levied for factory finishing work.",
+"* The work will be completed and handed over within .... days. In case of delay, the company will be forced to pay a penalty of Rs 1000 per day to the customer.",
+"* The pictures given in the quotation are indicative only.",
+"*Light 1000 Rs. per point will be added at the end of the bill. In which light and switch points, power points will be considered as separate points. This will include wiring, slit cutting and branded material. The amount mentioned in the quotation is just an estimate. Profile light running foot 200 Rs. and decorative light rates will be decided in the final bill as per the price.",
+"* Mouldings Rs. 80 running fit will be added to the final bill.",
+"* The materials shown in the design may be suggestive. If they are not mentioned in the quotation, they can be included in the construction after taking approval after supplementary quotation."
+].join("\n\n");
+
+function getTerms(){
+  const box=document.getElementById("tncbox");
+  const src=box ? box.value : DEFAULT_TERMS;
+  return src.split(/\n\s*\n|\n/).map(t=>t.trim()).filter(Boolean);
+}
+function toggleTnc(){
+  const p=document.getElementById("tncpanel"), b=document.getElementById("tncbtn");
+  const open=p.style.display!=="none";
+  p.style.display=open?"none":"block";
+  b.textContent=open?"✎ Edit Terms and Conditions":"▲ Close (changes are saved automatically)";
+  if(!open){ autoGrow(document.getElementById("tncbox")); }
+}
+function resetTnc(){
+  if(confirm("Reset Terms & Conditions to Decoory standard?")){
+    const box=document.getElementById("tncbox");
+    box.value=DEFAULT_TERMS; autoGrow(box); render();
+  }
+}
+function autoGrow(el){ el.style.height="auto"; el.style.height=(el.scrollHeight+4)+"px"; }
 function upd(i,k,v){ items[i][k]=v; if(k!=="desc") drawPrices(); render(); }
 function priceOf(it){
   const r=parseFloat(it.rate)||0, q=parseFloat(it.qty)||0;
@@ -161,9 +289,13 @@ function drawForm(){
   box.innerHTML = items.map((it,i)=>`
     <div class="item">
       <button class="del" onclick="delItem(${i})">✕ remove</button>
+      <div class="field" style="margin-bottom:8px">
+        <label>Item ${i+1} — title</label>
+        <input value="${esc(it.title)}" placeholder="e.g. Modular Kitchen" oninput="upd(${i},'title',this.value)">
+      </div>
       <div class="field" style="margin-bottom:0">
-        <label>Item ${i+1} — description</label>
-        <input value="${esc(it.desc)}" placeholder="e.g. Modular Kitchen : HDHMR Century, PU paint..." oninput="upd(${i},'desc',this.value)">
+        <label>Description (optional)</label>
+        <textarea rows="2" style="resize:vertical;font-size:13px;line-height:1.45" placeholder="e.g. Providing and installation of ... 18mm THK HDHMR, PU paint, Kvalit Germany fittings" oninput="upd(${i},'desc',this.value);autoGrow(this)">${esc(it.desc)}</textarea>
       </div>
       <div class="grid">
         <div><label style="font-size:10px;color:var(--muted)">UOM</label>
@@ -193,22 +325,11 @@ function render(){
         a3=Math.round(total*pcts[2]/100), a4=total-a1-a2-a3;
 
   const rows=items.map((it,i)=>`<tr>
-    <td class="c">${i+1}</td><td>${esc(it.desc)}</td><td class="c">${esc(it.uom)}</td>
+    <td class="c">${i+1}</td><td>${esc(it.title)}${it.title&&it.desc?" - ":""}${esc(it.desc)}</td><td class="c">${esc(it.uom)}</td>
     <td class="c">INR ${inr(parseFloat(it.rate)||0)}</td><td class="c">${esc(it.qty)}</td>
     <td class="c">INR ${inr(priceOf(it))}</td></tr>`).join("");
 
-  const terms=[
-"Rates will change if there is change in material and increase in quantity.",
-"*Society and other types of legal formalities will be completed by the customer.",
-"*The customer will have to make arrangements for electricity, water and toilet etc. The company will ensure its regular cleanliness.",
-"* If acrylic laminate is used, then an additional charge of Rs 100 per square feet will be added to the wood work.",
-"* An additional charge of Rs 150 per square feet will be levied for factory finishing work.",
-"* The work will be completed and handed over within .... days. In case of delay, the company will be forced to pay a penalty of Rs 1000 per day to the customer.",
-"* The pictures given in the quotation are indicative only.",
-"*Light 1000 Rs. per point will be added at the end of the bill. In which light and switch points, power points will be considered as separate points. This will include wiring, slit cutting and branded material. The amount mentioned in the quotation is just an estimate. Profile light running foot 200 Rs. and decorative light rates will be decided in the final bill as per the price.",
-"* Mouldings Rs. 80 running fit will be added to the final bill.",
-"* The materials shown in the design may be suggestive. If they are not mentioned in the quotation, they can be included in the construction after taking approval after supplementary quotation."
-  ].map(t=>`<p>${esc(t)}</p>`).join("");
+  const terms=getTerms().map(t=>`<p>${esc(t)}</p>`).join("");
 
   document.getElementById("sheet").innerHTML=`
   <div class="s-head">
@@ -257,6 +378,8 @@ function makePdf(){
 }
 
 document.getElementById("cdate").value=today();
+document.getElementById("tncbox").value=DEFAULT_TERMS;
+drawChips();
 addItem(); // start with one empty row
 render();
 </script>
