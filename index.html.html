@@ -97,6 +97,11 @@ table.q td.c{text-align:center;white-space:nowrap}
         <div class="field"><label>Contact number</label><input id="cphone" placeholder="10-digit mobile" oninput="render()"></div>
         <div class="field"><label>Date</label><input id="cdate" type="date" oninput="render()"></div>
       </div>
+      <div class="row2">
+        <div class="field"><label>Quotation No</label><input id="qno" oninput="render()"></div>
+        <div class="field"><label>Valid for (days)</label><input id="vdays" type="number" value="15" oninput="render()"></div>
+      </div>
+      <div class="field"><label>Completion time (days) — fills the "within .... days" in T&amp;C</label><input id="compdays" type="number" placeholder="e.g. 45" oninput="render()"></div>
     </div>
 
     <div class="panel" style="margin-top:14px">
@@ -129,8 +134,15 @@ table.q td.c{text-align:center;white-space:nowrap}
         <div class="field"><label>Final — handover</label><input id="p4" type="number" value="5" oninput="render()"></div>
       </div>
       <div class="hint" id="pctwarn"></div>
+      <div class="row2" style="margin-top:6px">
+        <div class="field"><label>Discount (optional)</label><input id="disc" type="number" placeholder="0" oninput="render()"></div>
+        <div class="field"><label>Discount type</label>
+          <select id="disctype" onchange="render()"><option value="inr">₹ amount</option><option value="pct">% percent</option></select>
+        </div>
+      </div>
       <button class="btn btn-pdf" onclick="makePdf()">Download PDF</button>
-      <div class="hint">Opens your device's print dialog — choose <b>"Save as PDF"</b>. Works on phone and computer. Bank details are fixed as per Decoory standard.</div>
+      <button class="btn btn-add" style="margin-top:8px" onclick="newQuote()">🗒 Start new quote</button>
+      <div class="hint">Opens your device's print dialog — choose <b>"Save as PDF"</b>. Your work saves automatically on this device — closing or refreshing the page won't lose it. "Start new quote" clears the form and gives the next quotation number.</div>
     </div>
   </div>
 
@@ -300,7 +312,7 @@ function drawForm(){
       <div class="grid">
         <div><label style="font-size:10px;color:var(--muted)">UOM</label>
           <select onchange="upd(${i},'uom',this.value)">
-            ${["Sq Ft","Nos","Rft","Lumpsum"].map(u=>`<option ${u===it.uom?"selected":""}>${u}</option>`).join("")}
+            ${["Sq Ft","Nos","Rft","Inches","Lumpsum"].map(u=>`<option ${u===it.uom?"selected":""}>${u}</option>`).join("")}
           </select></div>
         <div><label style="font-size:10px;color:var(--muted)">Rate ₹</label>
           <input type="number" value="${esc(it.rate)}" oninput="upd(${i},'rate',this.value)"></div>
@@ -315,28 +327,41 @@ function render(){
   const name=document.getElementById("cname").value||"________";
   const phone=document.getElementById("cphone").value;
   const date=niceDate(document.getElementById("cdate").value);
+  const qnum=document.getElementById("qno").value.trim();
+  const vdays=parseInt(document.getElementById("vdays").value)||0;
   const total=items.reduce((s,it)=>s+priceOf(it),0);
+
+  // discount
+  const dv=parseFloat(document.getElementById("disc").value)||0;
+  const dtype=document.getElementById("disctype").value;
+  let discAmt = dtype==="pct" ? Math.round(total*dv/100) : Math.round(dv);
+  if(discAmt<0) discAmt=0; if(discAmt>total) discAmt=total;
+  const net = total - discAmt;
 
   const pcts=[+p1.value||0,+p2.value||0,+p3.value||0,+p4.value||0];
   const sumP=pcts.reduce((a,b)=>a+b,0);
   document.getElementById("pctwarn").innerHTML =
     sumP===100 ? "" : `<span style="color:var(--red);font-weight:600">Percentages add up to ${sumP}% — should be 100%.</span>`;
-  const a1=Math.round(total*pcts[0]/100), a2=Math.round(total*pcts[1]/100),
-        a3=Math.round(total*pcts[2]/100), a4=total-a1-a2-a3;
+  const a1=Math.round(net*pcts[0]/100), a2=Math.round(net*pcts[1]/100),
+        a3=Math.round(net*pcts[2]/100), a4=net-a1-a2-a3;
 
   const rows=items.map((it,i)=>`<tr>
     <td class="c">${i+1}</td><td>${esc(it.title)}${it.title&&it.desc?" - ":""}${esc(it.desc)}</td><td class="c">${esc(it.uom)}</td>
     <td class="c">INR ${inr(parseFloat(it.rate)||0)}</td><td class="c">${esc(it.qty)}</td>
     <td class="c">INR ${inr(priceOf(it))}</td></tr>`).join("");
 
-  const terms=getTerms().map(t=>`<p>${esc(t)}</p>`).join("");
+  const cdays=parseInt(document.getElementById("compdays").value)||0;
+  const terms=getTerms().map(t=>{
+    if(cdays>0) t=t.replace(/within\s*\.{2,}\s*days/i, "within "+cdays+" days");
+    return `<p>${esc(t)}</p>`;
+  }).join("");
 
   document.getElementById("sheet").innerHTML=`
   <div class="s-head">
     <img src="${LOGO}" alt="Decoory">
     <div class="s-addr"><b>Decoory Interiors</b><br>A Unit Of Chirag Digital (P) Ltd.<br>Noida, Uttar Pradesh<br>01204417099<br>decooryofficial@gmail.com</div>
   </div>
-  <div class="s-prep">Prepared for<br><b>${esc(name)}</b>${phone?"<br>Contact: "+esc(phone):""}<br>${date}</div>
+  <div class="s-prep">Prepared for<br><b>${esc(name)}</b>${phone?"<br>Contact: "+esc(phone):""}<br>${date}${qnum?"<br>Quotation No: <b>"+esc(qnum)+"</b>":""}${vdays>0?`<br><span style="font-size:9pt;color:#555">Valid for ${vdays} days from date of issue</span>`:""}</div>
   <div class="s-title">ESTIMATE</div>
   <div class="s-sec">All Area</div>
   <table class="q">
@@ -350,8 +375,10 @@ function render(){
   </table>
   <table class="tot">
     <tr><td>Total</td><td><b>INR ${inr(total)}</b></td></tr>
+    ${discAmt>0?`<tr><td>Discount${dtype==="pct"?" ("+dv+"%)":""}</td><td>&minus; INR ${inr(discAmt)}</td></tr>
+    <tr><td>Net Total</td><td><b>INR ${inr(net)}</b></td></tr>`:""}
     <tr><td>GST</td><td>As Applicable</td></tr>
-    <tr><td>Grand Total</td><td><b>INR ${inr(total)} +GST</b></td></tr>
+    <tr><td>Grand Total</td><td><b>INR ${inr(net)} +GST</b></td></tr>
   </table>
   <div class="keep">
   <div class="s-sec">Payment Plan</div>
@@ -369,18 +396,63 @@ function render(){
   </div>
   <div class="s-sec">Terms and Conditions</div>
   <div class="terms">${terms}</div>`;
+  saveDraft();
+}
+
+/* ===== AUTO-SAVE & QUOTE NUMBER ===== */
+const FIELD_IDS=["cname","cphone","cdate","qno","vdays","compdays","disc","disctype","p1","p2","p3","p4"];
+function saveDraft(){
+  try{
+    const d={items:items, tnc:document.getElementById("tncbox").value};
+    FIELD_IDS.forEach(id=>d[id]=document.getElementById(id).value);
+    localStorage.setItem("dq_draft", JSON.stringify(d));
+  }catch(e){}
+}
+function loadDraft(){
+  try{
+    const raw=localStorage.getItem("dq_draft");
+    if(!raw) return false;
+    const d=JSON.parse(raw);
+    FIELD_IDS.forEach(id=>{ if(d[id]!==undefined) document.getElementById(id).value=d[id]; });
+    if(d.tnc) document.getElementById("tncbox").value=d.tnc;
+    items=(d.items&&d.items.length)?d.items:[];
+    return true;
+  }catch(e){ return false; }
+}
+function nextQuoteNo(){
+  let seq=parseInt(localStorage.getItem("dq_seq"))||0;
+  if(seq<100) seq=300+Math.floor(Math.random()*600); // start at a random 3xx-8xx so numbering looks established
+  seq+=1;
+  localStorage.setItem("dq_seq", seq);
+  return "DQ-"+new Date().getFullYear()+"-"+seq;
+}
+function newQuote(){
+  if(!confirm("Start a new quote? Current form will be cleared (your T&C edits are kept).")) return;
+  ["cname","cphone","compdays","disc"].forEach(id=>document.getElementById(id).value="");
+  document.getElementById("cdate").value=today();
+  document.getElementById("vdays").value=15;
+  document.getElementById("disctype").value="inr";
+  p1.value=25;p2.value=35;p3.value=35;p4.value=5;
+  document.getElementById("qno").value=nextQuoteNo();
+  items=[]; addItem();
 }
 
 function makePdf(){
   const name=document.getElementById("cname").value.trim()||"Client";
-  document.title="Decoory Quotation - "+name;
+  const q=document.getElementById("qno").value.trim();
+  document.title="Decoory Quotation "+(q?q+" ":"")+"- "+name;
   window.print();
 }
 
-document.getElementById("cdate").value=today();
-document.getElementById("tncbox").value=DEFAULT_TERMS;
 drawChips();
-addItem(); // start with one empty row
+document.getElementById("tncbox").value=DEFAULT_TERMS;
+if(loadDraft()){
+  drawForm(); render();
+}else{
+  document.getElementById("cdate").value=today();
+  document.getElementById("qno").value=nextQuoteNo();
+  addItem(); // draws form + renders
+}
 render();
 </script>
 <!-- ===== PIN LOCK ===== -->
