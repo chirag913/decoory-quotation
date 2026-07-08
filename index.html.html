@@ -260,5 +260,37 @@ document.getElementById("cdate").value=today();
 addItem(); // start with one empty row
 render();
 </script>
+<!-- ===== PIN LOCK ===== -->
+<div id="gate" style="position:fixed;inset:0;background:#F3F1EE;z-index:999;display:flex;align-items:center;justify-content:center">
+  <div style="background:#fff;border:1px solid #D9D6D2;border-top:4px solid #C0392B;border-radius:12px;padding:34px 30px;width:320px;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,.10)">
+    <img src="" id="gatelogo" style="width:170px;margin-bottom:18px" alt="Decoory">
+    <div style="font-family:'Poppins';font-weight:600;font-size:14px;color:#2B2B2B;margin-bottom:14px">Enter PIN to continue</div>
+    <input id="pinbox" type="password" inputmode="numeric" maxlength="8" autocomplete="off"
+      style="text-align:center;font-size:22px;letter-spacing:8px;padding:10px;width:100%;border:1px solid #D9D6D2;border-radius:8px"
+      onkeydown="if(event.key==='Enter')checkPin()">
+    <button class="btn btn-pdf" style="margin-top:14px" onclick="checkPin()">Unlock</button>
+    <div id="pinerr" style="color:#C0392B;font-size:12px;font-weight:600;margin-top:10px;min-height:15px"></div>
+  </div>
+</div>
+<script>
+const PIN_HASH="1cfafff6d51a03662b85b93dc3417f51687034ba9a46682f5328257eff7133ed";
+document.getElementById("gatelogo").src=LOGO;
+async function sha256(t){
+  const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));
+  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
+}
+async function checkPin(){
+  const v=document.getElementById("pinbox").value.trim();
+  if(await sha256(v)===PIN_HASH){
+    sessionStorage.setItem("dq_ok","1");
+    document.getElementById("gate").style.display="none";
+  }else{
+    document.getElementById("pinerr").textContent="Wrong PIN, try again";
+    document.getElementById("pinbox").value="";
+  }
+}
+if(sessionStorage.getItem("dq_ok")==="1") document.getElementById("gate").style.display="none";
+else document.getElementById("pinbox").focus();
+</script>
 </body>
 </html>
