@@ -43,6 +43,14 @@ input:focus,select:focus,textarea:focus{outline:2px solid var(--red);outline-off
 .chip.cat{font-weight:600;background:#F0EDEA}
 .chip.cat.on{background:var(--red);border-color:var(--red);color:#fff}
 .subwrap{background:#FBFAF8;border:1px dashed var(--line);border-radius:8px;padding:8px;margin-bottom:12px}
+.hrow{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin-bottom:8px;background:#FBFAF8}
+.hrow .hinfo{flex:1;min-width:0}
+.hrow .hq{font-weight:700;font-size:12.5px}
+.hrow .hm{font-size:11.5px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.hrow .hload{border:1px solid var(--red);background:#fff;color:var(--red);border-radius:6px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer}
+.hrow .hload:hover{background:var(--red);color:#fff}
+.hrow .hdel{border:none;background:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px}
+.hrow .hdel:hover{color:var(--red)}
 .chiplabel{font-size:11px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.05em;margin-bottom:6px}
 .hint{font-size:11.5px;color:var(--muted);margin-top:8px;line-height:1.5}
 
@@ -143,6 +151,11 @@ table.q td.c{text-align:center;white-space:nowrap}
       <button class="btn btn-pdf" onclick="makePdf()">Download PDF</button>
       <button class="btn btn-add" style="margin-top:8px" onclick="newQuote()">🗒 Start new quote</button>
       <div class="hint">Opens your device's print dialog — choose <b>"Save as PDF"</b>. Your work saves automatically on this device — closing or refreshing the page won't lose it. "Start new quote" clears the form and gives the next quotation number.</div>
+    </div>
+
+    <div class="panel" style="margin-top:14px">
+      <h2>Recent quotes (last 10)</h2>
+      <div id="history"><div class="hint" style="margin:0">No saved quotes yet — a quote is saved here automatically when you download its PDF.</div></div>
     </div>
   </div>
 
@@ -399,25 +412,78 @@ function render(){
   saveDraft();
 }
 
-/* ===== AUTO-SAVE & QUOTE NUMBER ===== */
+/* ===== AUTO-SAVE, HISTORY & QUOTE NUMBER ===== */
 const FIELD_IDS=["cname","cphone","cdate","qno","vdays","compdays","disc","disctype","p1","p2","p3","p4"];
+function collect(){
+  const d={items:items, tnc:document.getElementById("tncbox").value};
+  FIELD_IDS.forEach(id=>d[id]=document.getElementById(id).value);
+  return d;
+}
+function applyData(d){
+  FIELD_IDS.forEach(id=>{ if(d[id]!==undefined) document.getElementById(id).value=d[id]; });
+  if(d.tnc) document.getElementById("tncbox").value=d.tnc;
+  items=(d.items&&d.items.length)?JSON.parse(JSON.stringify(d.items)):[];
+  if(!items.length) items=[{title:"",desc:"",uom:"Sq Ft",rate:"",qty:""}];
+  drawForm(); render();
+}
 function saveDraft(){
-  try{
-    const d={items:items, tnc:document.getElementById("tncbox").value};
-    FIELD_IDS.forEach(id=>d[id]=document.getElementById(id).value);
-    localStorage.setItem("dq_draft", JSON.stringify(d));
-  }catch(e){}
+  try{ localStorage.setItem("dq_draft", JSON.stringify(collect())); }catch(e){}
 }
 function loadDraft(){
   try{
     const raw=localStorage.getItem("dq_draft");
     if(!raw) return false;
-    const d=JSON.parse(raw);
-    FIELD_IDS.forEach(id=>{ if(d[id]!==undefined) document.getElementById(id).value=d[id]; });
-    if(d.tnc) document.getElementById("tncbox").value=d.tnc;
-    items=(d.items&&d.items.length)?d.items:[];
+    applyData(JSON.parse(raw));
     return true;
   }catch(e){ return false; }
+}
+function netTotal(){
+  const total=items.reduce((s,it)=>s+priceOf(it),0);
+  const dv=parseFloat(document.getElementById("disc").value)||0;
+  const dtype=document.getElementById("disctype").value;
+  let da = dtype==="pct" ? Math.round(total*dv/100) : Math.round(dv);
+  if(da<0) da=0; if(da>total) da=total;
+  return total-da;
+}
+function getHistory(){ try{ return JSON.parse(localStorage.getItem("dq_history")||"[]"); }catch(e){ return []; } }
+function saveToHistory(){
+  const d=collect();
+  const hasContent = d.cname.trim() || items.some(it=>it.title||it.desc||parseFloat(it.rate)>0);
+  if(!hasContent) return;
+  let h=getHistory();
+  if(d.qno) h=h.filter(e=>e.qno!==d.qno); // same quote no => update, not duplicate
+  h.unshift({ts:Date.now(), qno:d.qno, cname:d.cname, amount:netTotal(), data:d});
+  h=h.slice(0,10);
+  try{ localStorage.setItem("dq_history", JSON.stringify(h)); }catch(e){}
+  drawHistory();
+}
+function drawHistory(){
+  const h=getHistory(), box=document.getElementById("history");
+  if(!h.length){ box.innerHTML='<div class="hint" style="margin:0">No saved quotes yet — a quote is saved here automatically when you download its PDF.</div>'; return; }
+  box.innerHTML=h.map((e,i)=>{
+    const dt=new Date(e.ts).toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
+    return `<div class="hrow">
+      <div class="hinfo">
+        <div class="hq">${esc(e.qno||"(no number)")} · ₹ ${inr(e.amount||0)}</div>
+        <div class="hm">${esc(e.cname||"—")} · ${dt}</div>
+      </div>
+      <button class="hload" onclick="loadEntry(${i})">Edit</button>
+      <button class="hdel" title="Delete" onclick="deleteEntry(${i})">✕</button>
+    </div>`;
+  }).join("");
+}
+function loadEntry(i){
+  const h=getHistory(); if(!h[i]) return;
+  if(!confirm("Load "+(h[i].qno||"this quote")+" for editing? Current form will be replaced.")) return;
+  applyData(h[i].data);
+  window.scrollTo({top:0,behavior:"smooth"});
+}
+function deleteEntry(i){
+  let h=getHistory(); if(!h[i]) return;
+  if(!confirm("Delete "+(h[i].qno||"this saved quote")+" from history?")) return;
+  h.splice(i,1);
+  try{ localStorage.setItem("dq_history", JSON.stringify(h)); }catch(e){}
+  drawHistory();
 }
 function nextQuoteNo(){
   let seq=parseInt(localStorage.getItem("dq_seq"))||0;
@@ -427,7 +493,8 @@ function nextQuoteNo(){
   return "DQ-"+new Date().getFullYear()+"-"+seq;
 }
 function newQuote(){
-  if(!confirm("Start a new quote? Current form will be cleared (your T&C edits are kept).")) return;
+  if(!confirm("Start a new quote? Current form will be cleared (your T&C edits are kept, and the current quote is saved in Recent quotes).")) return;
+  saveToHistory();
   ["cname","cphone","compdays","disc"].forEach(id=>document.getElementById(id).value="");
   document.getElementById("cdate").value=today();
   document.getElementById("vdays").value=15;
@@ -441,14 +508,14 @@ function makePdf(){
   const name=document.getElementById("cname").value.trim()||"Client";
   const q=document.getElementById("qno").value.trim();
   document.title="Decoory Quotation "+(q?q+" ":"")+"- "+name;
+  saveToHistory();
   window.print();
 }
 
 drawChips();
 document.getElementById("tncbox").value=DEFAULT_TERMS;
-if(loadDraft()){
-  drawForm(); render();
-}else{
+drawHistory();
+if(!loadDraft()){
   document.getElementById("cdate").value=today();
   document.getElementById("qno").value=nextQuoteNo();
   addItem(); // draws form + renders
