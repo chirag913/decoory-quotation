@@ -446,54 +446,47 @@ function netTotal(){
   if(da<0) da=0; if(da>total) da=total;
   return total-da;
 }
-function getHistory(){ try{ return JSON.parse(localStorage.getItem("dq_history")||"[]"); }catch(e){ return []; } }
+window._hist = [];
 function saveToHistory(){
+  if(!window.CLOUD) return;
   const d=collect();
   const hasContent = d.cname.trim() || items.some(it=>it.title||it.desc||parseFloat(it.rate)>0);
   if(!hasContent) return;
-  let h=getHistory();
-  if(d.qno) h=h.filter(e=>e.qno!==d.qno); // same quote no => update, not duplicate
-  h.unshift({ts:Date.now(), qno:d.qno, cname:d.cname, amount:netTotal(), data:d});
-  h=h.slice(0,10);
-  try{ localStorage.setItem("dq_history", JSON.stringify(h)); }catch(e){}
-  drawHistory();
+  window.CLOUD.save(d, netTotal()).catch(e=>alert("Could not save to cloud: "+(e.code||e.message)));
 }
 function drawHistory(){
-  const h=getHistory(), box=document.getElementById("history");
-  if(!h.length){ box.innerHTML='<div class="hint" style="margin:0">No saved quotes yet — a quote is saved here automatically when you download its PDF.</div>'; return; }
+  const h=window._hist||[], box=document.getElementById("history");
+  if(!h.length){ box.innerHTML='<div class="hint" style="margin:0">No saved quotes yet \u2014 a quote is saved here automatically when you download its PDF.</div>'; return; }
   box.innerHTML=h.map((e,i)=>{
-    const dt=new Date(e.ts).toLocaleDateString("en-IN",{day:"2-digit",month:"short"});
+    const dt=e.ts&&e.ts.toDate?e.ts.toDate().toLocaleDateString("en-IN",{day:"2-digit",month:"short"}):"";
+    const by=e.by?(" \u00b7 "+esc(e.by.split("@")[0])):"";
     return `<div class="hrow">
       <div class="hinfo">
-        <div class="hq">${esc(e.qno||"(no number)")} · ₹ ${inr(e.amount||0)}</div>
-        <div class="hm">${esc(e.cname||"—")} · ${dt}</div>
+        <div class="hq">${esc(e.qno||"(no number)")} \u00b7 \u20b9 ${inr(e.amount||0)}</div>
+        <div class="hm">${esc(e.cname||"\u2014")} \u00b7 ${dt}${by}</div>
       </div>
       <button class="hload" onclick="loadEntry(${i})">Edit</button>
-      <button class="hdel" title="Delete" onclick="deleteEntry(${i})">✕</button>
+      <button class="hdel" title="Delete" onclick="deleteEntry(${i})">\u2715</button>
     </div>`;
   }).join("");
 }
+window.drawHistory = drawHistory;
 function loadEntry(i){
-  const h=getHistory(); if(!h[i]) return;
+  const h=window._hist; if(!h[i]) return;
   if(!confirm("Load "+(h[i].qno||"this quote")+" for editing? Current form will be replaced.")) return;
   applyData(h[i].data);
   window.scrollTo({top:0,behavior:"smooth"});
 }
 function deleteEntry(i){
-  let h=getHistory(); if(!h[i]) return;
-  if(!confirm("Delete "+(h[i].qno||"this saved quote")+" from history?")) return;
-  h.splice(i,1);
-  try{ localStorage.setItem("dq_history", JSON.stringify(h)); }catch(e){}
-  drawHistory();
+  const h=window._hist; if(!h[i]||!window.CLOUD) return;
+  if(!confirm("Delete "+(h[i].qno||"this saved quote")+" for everyone? This cannot be undone.")) return;
+  window.CLOUD.del(h[i].id).catch(e=>alert("Delete failed: "+(e.code||e.message)));
 }
-function nextQuoteNo(){
-  let seq=parseInt(localStorage.getItem("dq_seq"))||0;
-  if(seq<100) seq=300+Math.floor(Math.random()*600); // start at a random 3xx-8xx so numbering looks established
-  seq+=1;
-  localStorage.setItem("dq_seq", seq);
-  return "DQ-"+new Date().getFullYear()+"-"+seq;
+async function nextQuoteNo(){
+  if(window.CLOUD) return await window.CLOUD.nextQno();
+  return "DQ-"+new Date().getFullYear()+"-"+(300+Math.floor(Math.random()*600));
 }
-function newQuote(){
+async function newQuote(){
   if(!confirm("Start a new quote? Current form will be cleared (your T&C edits are kept, and the current quote is saved in Recent quotes).")) return;
   saveToHistory();
   ["cname","cphone","compdays","disc"].forEach(id=>document.getElementById(id).value="");
@@ -501,8 +494,10 @@ function newQuote(){
   document.getElementById("vdays").value=15;
   document.getElementById("disctype").value="inr";
   p1.value=25;p2.value=35;p3.value=35;p4.value=5;
-  document.getElementById("qno").value=nextQuoteNo();
+  document.getElementById("qno").value="";
   items=[]; addItem();
+  document.getElementById("qno").value=await nextQuoteNo();
+  render();
 }
 
 function makePdf(){
@@ -515,45 +510,158 @@ function makePdf(){
 
 drawChips();
 document.getElementById("tncbox").value=DEFAULT_TERMS;
-drawHistory();
-if(!loadDraft()){
-  document.getElementById("cdate").value=today();
-  document.getElementById("qno").value=nextQuoteNo();
-  addItem(); // draws form + renders
-}
-render();
+window.appStart = async function(){
+  drawHistory();
+  if(!loadDraft()){
+    document.getElementById("cdate").value=today();
+    addItem(); // draws form + renders
+    document.getElementById("qno").value=await nextQuoteNo();
+    render();
+  }
+};
 </script>
-<!-- ===== PIN LOCK ===== -->
+<!-- ===== GOOGLE LOGIN GATE ===== -->
 <div id="gate" style="position:fixed;inset:0;background:#F3F1EE;z-index:999;display:flex;align-items:center;justify-content:center">
-  <div style="background:#fff;border:1px solid #D9D6D2;border-top:4px solid #C0392B;border-radius:12px;padding:34px 30px;width:320px;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,.10)">
+  <div style="background:#fff;border:1px solid #D9D6D2;border-top:4px solid #C0392B;border-radius:12px;padding:34px 30px;width:340px;text-align:center;box-shadow:0 6px 30px rgba(0,0,0,.10)">
     <img src="" id="gatelogo" style="width:170px;margin-bottom:18px" alt="Decoory">
-    <div style="font-family:'Poppins';font-weight:600;font-size:14px;color:#2B2B2B;margin-bottom:14px">Enter PIN to continue</div>
-    <input id="pinbox" type="password" inputmode="numeric" maxlength="8" autocomplete="off"
-      style="text-align:center;font-size:22px;letter-spacing:8px;padding:10px;width:100%;border:1px solid #D9D6D2;border-radius:8px"
-      onkeydown="if(event.key==='Enter')checkPin()">
-    <button class="btn btn-pdf" style="margin-top:14px" onclick="checkPin()">Unlock</button>
-    <div id="pinerr" style="color:#C0392B;font-size:12px;font-weight:600;margin-top:10px;min-height:15px"></div>
+    <div id="gatemsg" style="font-family:'Poppins';font-weight:600;font-size:14px;color:#2B2B2B;margin-bottom:16px">Loading...</div>
+    <div id="emailform" style="display:none;text-align:left">
+      <input id="lemail" type="email" placeholder="Email" autocomplete="username" style="margin-bottom:8px">
+      <input id="lpass" type="password" placeholder="Password" autocomplete="current-password" style="margin-bottom:10px" onkeydown="if(event.key==='Enter')window.CLOUD_SIGNIN_EMAIL()">
+      <button class="btn btn-pdf" style="margin-top:0" onclick="window.CLOUD_SIGNIN_EMAIL()">Sign in</button>
+      <div style="text-align:center;font-size:11.5px;color:#999;margin:10px 0">— or —</div>
+    </div>
+    <button id="gsignin" class="btn btn-add" style="display:none" onclick="window.CLOUD_SIGNIN()">Sign in with Google</button>
+    <button id="gsignout" class="btn btn-add" style="display:none;margin-top:10px" onclick="window.CLOUD_SIGNOUT()">Sign out</button>
+    <div id="gateerr" style="color:#C0392B;font-size:12px;font-weight:600;margin-top:12px;min-height:15px"></div>
   </div>
 </div>
-<script>
-const PIN_HASH="1cfafff6d51a03662b85b93dc3417f51687034ba9a46682f5328257eff7133ed";
-document.getElementById("gatelogo").src=LOGO;
-async function sha256(t){
-  const b=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(t));
-  return Array.from(new Uint8Array(b)).map(x=>x.toString(16).padStart(2,"0")).join("");
-}
-async function checkPin(){
-  const v=document.getElementById("pinbox").value.trim();
-  if(await sha256(v)===PIN_HASH){
-    sessionStorage.setItem("dq_ok","1");
-    document.getElementById("gate").style.display="none";
-  }else{
-    document.getElementById("pinerr").textContent="Wrong PIN, try again";
-    document.getElementById("pinbox").value="";
+<div id="whoami" style="display:none;position:fixed;bottom:10px;right:12px;background:#fff;border:1px solid var(--line);border-radius:999px;padding:5px 12px;font-size:11.5px;color:var(--muted);z-index:20">
+  <span id="whoemail"></span> · <a href="#" onclick="window.CLOUD_SIGNOUT();return false" style="color:var(--red)">sign out</a>
+</div>
+<script>document.getElementById("gatelogo").src=LOGO;</script>
+
+<script type="module">
+/* =====================================================================
+   FIREBASE SETUP — EDIT THE TWO BLOCKS BELOW (see SETUP-GUIDE)
+   ===================================================================== */
+
+// BLOCK 1: paste your Firebase config here (from Firebase console)
+const firebaseConfig = {
+  apiKey: "AIzaSyCgrlTC5FdwraRmJNaro2mpRwvKbFq5gDk",
+  authDomain: "decoory-dashboard.firebaseapp.com",
+  projectId: "decoory-dashboard",
+  storageBucket: "decoory-dashboard.firebasestorage.app",
+  messagingSenderId: "606655187349",
+  appId: "1:606655187349:web:abb28bb5cea85db28b0e9c"
+};
+
+// BLOCK 2: who is allowed in (must match the emails in Firestore rules)
+const ALLOWED_EMAILS = [
+  "chiragsharmadm@gmail.com",
+  "decooryofficial@gmail.com",
+  "team@decoory.com",
+];
+
+/* ===================== no edits needed below ===================== */
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+import { getAuth, GoogleAuthProvider, signInWithPopup, signInWithRedirect,
+         signInWithEmailAndPassword,
+         onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+import { getFirestore, doc, setDoc, deleteDoc, collection, query, orderBy,
+         limit, onSnapshot, runTransaction, serverTimestamp }
+  from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const provider = new GoogleAuthProvider();
+
+const gate = document.getElementById("gate"),
+      gmsg = document.getElementById("gatemsg"),
+      gerr = document.getElementById("gateerr"),
+      bIn  = document.getElementById("gsignin"),
+      bOut = document.getElementById("gsignout");
+
+window.CLOUD_SIGNIN = async ()=>{
+  gerr.textContent="";
+  try{ await signInWithPopup(auth, provider); }
+  catch(e){
+    if(e.code==="auth/popup-blocked"||e.code==="auth/cancelled-popup-request"){ signInWithRedirect(auth, provider); }
+    else gerr.textContent = e.message||"Sign-in failed, try again";
   }
-}
-if(sessionStorage.getItem("dq_ok")==="1") document.getElementById("gate").style.display="none";
-else document.getElementById("pinbox").focus();
+};
+window.CLOUD_SIGNIN_EMAIL = async ()=>{
+  gerr.textContent="";
+  const em=document.getElementById("lemail").value.trim();
+  const pw=document.getElementById("lpass").value;
+  if(!em||!pw){ gerr.textContent="Enter email and password"; return; }
+  try{ await signInWithEmailAndPassword(auth, em, pw); }
+  catch(e){
+    const m={"auth/invalid-credential":"Wrong email or password",
+             "auth/user-not-found":"No such user",
+             "auth/wrong-password":"Wrong password",
+             "auth/too-many-requests":"Too many attempts, wait a few minutes"};
+    gerr.textContent = m[e.code] || (e.code||"Sign-in failed");
+  }
+};
+window.CLOUD_SIGNOUT = ()=>signOut(auth);
+
+let unsub=null, started=false;
+
+onAuthStateChanged(auth, user=>{
+  if(unsub){ unsub(); unsub=null; }
+  if(!user){
+    gate.style.display="flex"; document.getElementById("whoami").style.display="none";
+    gmsg.textContent="Decoory Dashboard — sign in to continue";
+    document.getElementById("emailform").style.display="block";
+    bIn.style.display="block"; bOut.style.display="none";
+    return;
+  }
+  const email=(user.email||"").toLowerCase();
+  if(!ALLOWED_EMAILS.map(e=>e.toLowerCase()).includes(email)){
+    gmsg.innerHTML="Access denied for<br><b>"+email+"</b><br><span style='font-weight:400;font-size:12px;color:#777'>Ask the owner to add your email.</span>";
+    document.getElementById("emailform").style.display="none";
+    bIn.style.display="none"; bOut.style.display="inline-block";
+    return;
+  }
+  // authorised
+  gate.style.display="none";
+  document.getElementById("whoemail").textContent=email;
+  document.getElementById("whoami").style.display="block";
+
+  window.CLOUD = {
+    save: async (data, amount)=>{
+      let qno=(data.qno||"").trim();
+      if(!qno){ qno=await window.CLOUD.nextQno(); data.qno=qno; document.getElementById("qno").value=qno; }
+      const id=qno.replace(/[^A-Za-z0-9_-]/g,"_");
+      await setDoc(doc(db,"quotes",id),
+        { qno, cname:data.cname||"", amount:amount||0, ts:serverTimestamp(),
+          by:email, data }, { merge:true });
+    },
+    del: async (id)=>deleteDoc(doc(db,"quotes",id)),
+    nextQno: async ()=>{
+      try{
+        const seq = await runTransaction(db, async tx=>{
+          const ref=doc(db,"meta","counter");
+          const snap=await tx.get(ref);
+          let s = snap.exists()? (snap.data().seq||0) : (300+Math.floor(Math.random()*600));
+          s+=1; tx.set(ref,{seq:s}); return s;
+        });
+        return "DQ-"+new Date().getFullYear()+"-"+seq;
+      }catch(e){ return "DQ-"+new Date().getFullYear()+"-"+(300+Math.floor(Math.random()*600)); }
+    }
+  };
+
+  unsub = onSnapshot(query(collection(db,"quotes"), orderBy("ts","desc"), limit(50)),
+    snap=>{
+      window._hist = snap.docs.map(d=>({id:d.id, ...d.data()}));
+      if(window.drawHistory) window.drawHistory();
+    },
+    err=>{ console.error(err); gerr.textContent="Database error: "+err.code; });
+
+  if(!started){ started=true; window.appStart(); }
+});
 </script>
 </body>
 </html>
